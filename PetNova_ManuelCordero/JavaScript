@@ -1,0 +1,457 @@
+window.__petnovaOK = true; // tells index.html that this file loaded
+
+// ===== MOBILE MENU =====
+const menuToggle = document.getElementById("menuToggle");
+const navLinks = document.getElementById("navLinks");
+if (menuToggle && navLinks) {
+  menuToggle.addEventListener("click", () => navLinks.classList.toggle("open"));
+  navLinks.querySelectorAll("a").forEach((a) =>
+    a.addEventListener("click", () => navLinks.classList.remove("open"))
+  );
+}
+
+// ===== REVEAL ON SCROLL =====
+const observer = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        e.target.classList.add("show");
+        observer.unobserve(e.target);
+      }
+    });
+  },
+  { threshold: 0.15 }
+);
+document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
+
+// ===== ACCORDION (Functions) =====
+const panels = document.querySelectorAll(".panel");
+panels.forEach((panel) => {
+  const activate = () => {
+    panels.forEach((p) => p.classList.remove("active"));
+    panel.classList.add("active");
+  };
+  panel.addEventListener("click", activate);
+  panel.addEventListener("mouseenter", activate);
+});
+
+// ===== PET MAP (changes location with the arrows) =====
+const mapFrame = document.getElementById("mapFrame");
+const mapPrev = document.getElementById("mapPrev");
+const mapNext = document.getElementById("mapNext");
+
+if (mapFrame && mapPrev && mapNext) {
+  const base = "https://www.openstreetmap.org/export/embed.html?layer=mapnik&bbox=";
+  const places = [
+    "-79.5290%2C8.9880%2C-79.5140%2C9.0000", // Panama City (Via Espana)
+    "-79.7900%2C8.8740%2C-79.7740%2C8.8870", // La Chorrera
+    "-79.4720%2C8.9950%2C-79.4560%2C9.0100", // Costa del Este
+  ];
+  let m = 0;
+  const goMap = (dir) => {
+    m = (m + dir + places.length) % places.length;
+    mapFrame.src = base + places[m];
+  };
+  mapNext.addEventListener("click", () => goMap(1));
+  mapPrev.addEventListener("click", () => goMap(-1));
+}
+
+// ===== FAN CAROUSEL (Pet Moments) =====
+const cards = document.querySelectorAll("#fan figure");
+const dotsBox = document.getElementById("dots");
+const fanPrev = document.getElementById("fanPrev");
+const fanNext = document.getElementById("fanNext");
+
+if (cards.length && dotsBox) {
+  const total = cards.length;
+  const spacing = window.innerWidth < 900 ? 90 : 165;
+  let active = Math.floor(total / 2);
+  let timer;
+
+  cards.forEach((_, i) => {
+    const dot = document.createElement("span");
+    dot.addEventListener("click", () => { active = i; render(); resetAuto(); });
+    dotsBox.appendChild(dot);
+  });
+
+  function render() {
+    cards.forEach((card, i) => {
+      let offset = i - active;
+      // circular offset so the fan loops
+      if (offset > total / 2) offset -= total;
+      if (offset < -total / 2) offset += total;
+
+      const abs = Math.abs(offset);
+      const x = offset * spacing;
+      const y = abs * abs * 10;
+      const rot = offset * 9;
+      const scale = offset === 0 ? 1.05 : 1 - abs * 0.04;
+
+      card.style.transform = `translate(${x}px, ${y}px) rotate(${rot}deg) scale(${scale})`;
+      card.style.zIndex = 10 - abs;
+      card.style.opacity = abs > 3 ? 0 : 1;
+    });
+    [...dotsBox.children].forEach((d, i) => d.classList.toggle("on", i === active));
+  }
+
+  const next = () => { active = (active + 1) % total; render(); };
+  const prev = () => { active = (active - 1 + total) % total; render(); };
+  const startAuto = () => { timer = setInterval(next, 3500); };
+  const resetAuto = () => { clearInterval(timer); startAuto(); };
+
+  fanNext.addEventListener("click", () => { next(); resetAuto(); });
+  fanPrev.addEventListener("click", () => { prev(); resetAuto(); });
+
+  render();
+  startAuto();
+}
+
+// ===== ANIMATED COUNTERS =====
+function animateCount(el) {
+  const target = Number(el.dataset.count);
+  const start = performance.now();
+  const duration = 2000;
+  function tick(now) {
+    const p = Math.min((now - start) / duration, 1);
+    el.textContent = Math.floor(p * target).toLocaleString("en-US");
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+const counterObserver = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        animateCount(e.target);
+        counterObserver.unobserve(e.target);
+      }
+    });
+  },
+  { threshold: 0.5 }
+);
+document.querySelectorAll("[data-count]").forEach((c) => counterObserver.observe(c));
+
+// ===== FAQ ACCORDION =====
+const faqItems = document.querySelectorAll(".faq-item");
+function setFaq(item, open) {
+  const answer = item.querySelector(".faq-a");
+  item.classList.toggle("open", open);
+  answer.style.maxHeight = open ? answer.scrollHeight + "px" : "0px";
+}
+faqItems.forEach((item) => {
+  setFaq(item, item.classList.contains("open"));
+  item.querySelector(".faq-q").addEventListener("click", () => {
+    const willOpen = !item.classList.contains("open");
+    faqItems.forEach((other) => setFaq(other, false));
+    setFaq(item, willOpen);
+  });
+});
+
+// ===== CONTACT FORM (front-end only) =====
+const contactForm = document.getElementById("contactForm");
+const formOk = document.getElementById("formOk");
+if (contactForm && formOk) {
+  contactForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    formOk.classList.add("show");
+    contactForm.reset();
+    setTimeout(() => formOk.classList.remove("show"), 5000);
+  });
+}
+
+// =====================================================
+//                    EXTRA MOTION
+// =====================================================
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+// ===== SCROLL PROGRESS BAR + BACK TO TOP PAW =====
+const progressBar = document.createElement("div");
+progressBar.className = "scroll-progress";
+document.body.appendChild(progressBar);
+
+const toTop = document.createElement("button");
+toTop.className = "to-top";
+toTop.setAttribute("aria-label", "Back to top");
+toTop.innerHTML = '<svg viewBox="0 0 100 100"><use href="#paw"/></svg>';
+toTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+document.body.appendChild(toTop);
+
+// ===== SCROLL EFFECTS: navbar hide/shrink + parallax =====
+const navWrap = document.querySelector(".nav-wrap");
+const parallaxItems = [
+  [".flower-1", -0.08],
+  [".flower-2", 0.1],
+  [".blob-left", 0.12],
+  [".blob-right", -0.1],
+]
+  .map(([sel, speed]) => ({ el: document.querySelector(sel), speed }))
+  .filter((p) => p.el);
+
+let lastY = window.scrollY;
+let ticking = false;
+let lockHide = false;
+document.querySelectorAll('.nav-links a, .brand').forEach((a) => {
+  a.addEventListener('click', () => {
+    lockHide = true;
+    navWrap && navWrap.classList.remove('hide');
+    setTimeout(() => (lockHide = false), 1500);
+  });
+});
+
+function onScroll() {
+  const y = window.scrollY;
+  const max = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (max > 0 ? (y / max) * 100 : 0) + "%";
+  toTop.classList.toggle("show", y > 600);
+
+  if (navWrap) {
+    const menuOpen = navLinks && navLinks.classList.contains("open");
+    navWrap.classList.toggle("scrolled", y > 60);
+    navWrap.classList.toggle("hide", y > lastY && y > 300 && !menuOpen && !lockHide);
+  }
+  lastY = y;
+
+  if (!reduceMotion) {
+    parallaxItems.forEach(({ el, speed }) => {
+      const r = el.parentElement.getBoundingClientRect();
+      const offset = (r.top + r.height / 2 - window.innerHeight / 2) * speed;
+      el.style.translate = `0 ${offset}px`;
+    });
+  }
+  ticking = false;
+}
+window.addEventListener("scroll", () => {
+  if (!ticking) { requestAnimationFrame(onScroll); ticking = true; }
+}, { passive: true });
+onScroll();
+
+// ===== HIGHLIGHT THE MENU LINK OF THE CURRENT SECTION =====
+const menuLinks = [...document.querySelectorAll(".nav-links a")];
+const spy = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        menuLinks.forEach((a) => a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id));
+      }
+    });
+  },
+  { rootMargin: "-45% 0px -50% 0px" }
+);
+["home", "about", "functions", "contact", "privacy"].forEach((id) => {
+  const s = document.getElementById(id);
+  if (s) spy.observe(s);
+});
+
+// ===== HERO: letters rise one by one + mouse parallax =====
+const heroTitle = document.querySelector(".hero h1");
+if (heroTitle && !reduceMotion) {
+  const text = heroTitle.textContent;
+  heroTitle.setAttribute("aria-label", text);
+  heroTitle.textContent = "";
+  [...text].forEach((ch, i) => {
+    const s = document.createElement("span");
+    s.textContent = ch;
+    s.style.setProperty("--i", i);
+    s.setAttribute("aria-hidden", "true");
+    heroTitle.appendChild(s);
+  });
+}
+
+const hero = document.querySelector(".hero");
+const heroContent = document.querySelector(".hero-content");
+if (hero && heroContent && canHover && !reduceMotion) {
+  hero.addEventListener("mousemove", (e) => {
+    const x = e.clientX / window.innerWidth - 0.5;
+    const y = e.clientY / window.innerHeight - 0.5;
+    heroContent.style.translate = `${x * -34}px ${y * -22}px`;
+  });
+  hero.addEventListener("mouseleave", () => (heroContent.style.translate = ""));
+}
+
+// ===== FUNCTIONS ACCORDION: zoom, parallax, auto-play, keyboard =====
+const acc = document.getElementById("accordion");
+if (acc) {
+  const items = [...acc.querySelectorAll(".panel")];
+  let hovering = false;
+  let inView = false;
+  let current = Math.max(0, items.findIndex((p) => p.classList.contains("active")));
+
+  const setActive = (i) => {
+    current = (i + items.length) % items.length;
+    items.forEach((p, k) => p.classList.toggle("active", k === current));
+  };
+
+  items.forEach((p, i) => {
+    p.tabIndex = 0;
+    p.setAttribute("role", "button");
+
+    p.addEventListener("mouseenter", () => { hovering = true; current = i; });
+    p.addEventListener("click", () => { current = i; });
+    p.addEventListener("focus", () => setActive(i));
+    p.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); setActive(i + 1); items[current].focus(); }
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); setActive(i - 1); items[current].focus(); }
+    });
+
+    // the photo follows the mouse inside the panel
+    p.addEventListener("mousemove", (e) => {
+      const r = p.getBoundingClientRect();
+      const nx = (e.clientX - r.left) / r.width - 0.5;
+      const ny = (e.clientY - r.top) / r.height - 0.5;
+      p.style.setProperty("--px", nx * -26 + "px");
+      p.style.setProperty("--py", ny * -26 + "px");
+    });
+    p.addEventListener("mouseleave", () => {
+      p.style.setProperty("--px", "0px");
+      p.style.setProperty("--py", "0px");
+    });
+  });
+
+  acc.addEventListener("mouseleave", () => (hovering = false));
+  new IntersectionObserver((es) => (inView = es[0].isIntersecting), { threshold: 0.3 }).observe(acc);
+
+  // when nobody is touching it, it keeps moving on its own
+  if (!reduceMotion) {
+    setInterval(() => {
+      if (!hovering && inView && !document.hidden) setActive(current + 1);
+    }, 4500);
+  }
+}
+
+// ===== GLOW THAT FOLLOWS THE MOUSE ON CARDS =====
+document.querySelectorAll(".mvv-card, .step").forEach((el) => {
+  el.addEventListener("mousemove", (e) => {
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--x", e.clientX - r.left + "px");
+    el.style.setProperty("--y", e.clientY - r.top + "px");
+  });
+});
+
+// ===== STAGGERED REVEAL (cards appear one after another) =====
+const clearDelay = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        setTimeout(() => (e.target.style.transitionDelay = ""), 1800);
+        clearDelay.unobserve(e.target);
+      }
+    });
+  },
+  { threshold: 0.15 }
+);
+document.querySelectorAll(".mvv-grid, .steps-grid, .testi-grid").forEach((grid) => {
+  grid.querySelectorAll(".reveal").forEach((el, i) => {
+    el.style.transitionDelay = i * 140 + "ms";
+    clearDelay.observe(el);
+  });
+});
+
+// ===== MAGNETIC BUTTONS =====
+if (canHover && !reduceMotion) {
+  document.querySelectorAll(".btn-cta, .login, .circle").forEach((el) => {
+    el.addEventListener("mousemove", (e) => {
+      const r = el.getBoundingClientRect();
+      const dx = (e.clientX - r.left - r.width / 2) * 0.25;
+      const dy = (e.clientY - r.top - r.height / 2) * 0.25;
+      el.style.translate = `${dx}px ${dy}px`;
+    });
+    el.addEventListener("mouseleave", () => (el.style.translate = ""));
+  });
+}
+
+// ===== RIPPLE ON BUTTON CLICK =====
+document.querySelectorAll(".btn-cta, .contact-form button").forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    const r = btn.getBoundingClientRect();
+    const s = document.createElement("span");
+    s.className = "ripple";
+    s.style.left = e.clientX - r.left + "px";
+    s.style.top = e.clientY - r.top + "px";
+    btn.appendChild(s);
+    setTimeout(() => s.remove(), 700);
+  });
+});
+
+// ===== SWIPE / DRAG ON THE PET MOMENTS FAN =====
+const fanBox = document.getElementById("fan");
+if (fanBox) {
+  let startX = null;
+  fanBox.addEventListener("pointerdown", (e) => (startX = e.clientX));
+  window.addEventListener("pointerup", (e) => {
+    if (startX === null) return;
+    const dx = e.clientX - startX;
+    startX = null;
+    if (Math.abs(dx) > 50) {
+      document.getElementById(dx < 0 ? "fanNext" : "fanPrev").click();
+    }
+  });
+}
+
+// ===== PURPLE PAW PRINTS THAT FOLLOW THE CURSOR =====
+if (canHover && !reduceMotion) {
+  let lastX = 0, lastY2 = 0, left = false;
+  document.addEventListener("mousemove", (e) => {
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY2;
+    if (Math.hypot(dx, dy) < 80) return;
+
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+    lastX = e.clientX;
+    lastY2 = e.clientY;
+    left = !left;
+
+    const print = document.createElement("div");
+    print.className = "paw-print";
+    print.style.left = e.clientX + (left ? -10 : 10) + "px";
+    print.style.top = e.clientY + "px";
+    print.style.setProperty("--rot", angle + "deg");
+    print.innerHTML = '<svg viewBox="0 0 100 100"><use href="#paw"/></svg>';
+    document.body.appendChild(print);
+    setTimeout(() => print.remove(), 1400);
+  });
+}
+
+
+// =====================================================
+//     YOUR IMAGES (img/ folder) WITH SAFE BACKUPS
+// =====================================================
+// Fan photos: if img/petN.jpg does not exist, use the backup photo
+document.querySelectorAll("img[data-fallback]").forEach((img) => {
+  const useBackup = () => { img.src = img.dataset.fallback; };
+  img.addEventListener("error", useBackup, { once: true });
+  if (img.complete && img.naturalWidth === 0) useBackup();
+});
+
+// Logos: if img/logo.png does not exist, show the text logo
+document.querySelectorAll(".brand-logo, .footer-logo-img").forEach((img) => {
+  const holder = img.closest(".brand, .footer-logo");
+  const showText = () => holder && holder.classList.add("no-logo");
+  img.addEventListener("error", showText, { once: true });
+  if (img.complete && img.naturalWidth === 0) showText();
+});
+
+
+// =====================================================
+//        LIKE THE ORIGINAL SITE (Wix artwork)
+// =====================================================
+// Decorations of the "Raised with love" section pop in when it shows up
+const raisedSection = document.querySelector(".raised");
+if (raisedSection) {
+  new IntersectionObserver((entries, obs) => {
+    if (entries[0].isIntersecting) {
+      raisedSection.classList.add("in");
+      obs.disconnect();
+    }
+  }, { threshold: 0.15 }).observe(raisedSection);
+}
+
+// Wave band: use the real artwork only if it loads
+document.querySelectorAll(".waves").forEach((band) => {
+  const art = new Image();
+  art.onload = () => {
+    band.style.setProperty("--wave-img", "url('https://static.wixstatic.com/media/11062b_010acd29e7244c6cb351a4b9b8fdf2f5~mv2.png')");
+    band.classList.add("img-ok");
+  };
+  art.src = "https://static.wixstatic.com/media/11062b_010acd29e7244c6cb351a4b9b8fdf2f5~mv2.png";
+});
