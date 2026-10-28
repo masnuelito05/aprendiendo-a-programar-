@@ -1,560 +1,777 @@
-"use strict";
- 
-document.addEventListener("DOMContentLoaded", () => {
-  initNavigation();
-  initMobileMenu();
-  initFeatureAccordion();
-  initPetMap();
-  initPetMoments();
-  initCounters();
-  initFAQs();
-  initContactForm();
-  initRevealAnimations();
-  initBackToTop();
-  initImageFallbacks();
- 
-  // Indica que el JavaScript se cargó correctamente.
-  window.__petnovaOK = true;
-});
- 
-/* =====================================================
-   1. NAVEGACIÓN PRINCIPAL
-   Los enlaces llevan a secciones de la misma página.
-   ===================================================== */
- 
-function initNavigation() {
-  const navLinks = document.querySelectorAll(
-    ".nav-links a[href^='#'], .brand[href^='#']"
-  );
- 
-  navLinks.forEach((link) => {
-    link.addEventListener("click", (event) => {
-      const href = link.getAttribute("href");
- 
-      if (!href || href === "#") return;
- 
-      const target = document.querySelector(href);
- 
-      if (!target) return;
- 
-      event.preventDefault();
- 
-      target.scrollIntoView({
-        behavior: window.matchMedia(
-          "(prefers-reduced-motion: reduce)"
-        ).matches
-          ? "auto"
-          : "smooth",
-        block: "start"
-      });
- 
-      // Mantiene la URL dentro de la misma página.
-      history.replaceState(null, "", href);
- 
-      closeMobileMenu();
+/* =============================================================================
+   PET NOVA – script.js
+   -----------------------------------------------------------------------------
+   Estructura (mismo orden que la página):
+
+    00. Utilidades
+    01. Menú móvil
+    02. Aparición al hacer scroll (reveal) + reveal escalonado
+    03. Hero: título letra por letra + parallax con el mouse
+    04. Decoraciones de "Raised with love"
+    05. Funciones: acordeón (hover, teclado, inclinación 3D + foco de luz con el cursor, auto-play)
+    06. Tarjetas: brillo que sigue al mouse
+    07. Contadores de estadísticas
+    08. Pet Map: cambiar de zona
+    09. Pet Moments: abanico (flechas, puntos, swipe, auto-play)
+    10. FAQ
+    11. Formulario de contacto
+    12. Scroll: barra de progreso, volver arriba, navbar y parallax
+    13. Menú: resaltar la sección actual
+    14. Botones: efecto magnético y ripple
+    15. Huellas que siguen al cursor
+    16. Imágenes y logos con respaldo
+    17. Banda de olas con arte real
+
+   Cada bloque va dentro de safe(): si uno falla, los demás siguen funcionando.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  /* ===========================================================================
+     00. UTILIDADES
+     =========================================================================== */
+  const $ = (sel, ctx) => (ctx || document).querySelector(sel);
+  const $$ = (sel, ctx) => Array.from((ctx || document).querySelectorAll(sel));
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const hasIO = 'IntersectionObserver' in window;
+
+  const safe = (name, fn) => {
+    try { fn(); } catch (err) { console.error('[Pet Nova] "' + name + '" falló:', err); }
+  };
+
+  // Referencias que usan varios bloques
+  const navWrap = $('.nav-wrap');
+  const navLinks = $('#navLinks');
+
+
+  /* ===========================================================================
+     01. MENÚ MÓVIL
+     =========================================================================== */
+  safe('menu', () => {
+    const toggle = $('#menuToggle');
+    if (!toggle || !navLinks) return;
+
+    const setOpen = (open) => {
+      navLinks.classList.toggle('open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.innerHTML = open ? '&#10005;' : '&#9776;';
+    };
+
+    toggle.addEventListener('click', () => setOpen(!navLinks.classList.contains('open')));
+    navLinks.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => setOpen(false)));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+    document.addEventListener('click', (e) => {
+      if (!navLinks.contains(e.target) && !toggle.contains(e.target)) setOpen(false);
     });
   });
- 
-  // Actualiza el enlace activo según la sección visible.
-  const sections = document.querySelectorAll(
-    "main section[id], main section[aria-labelledby]"
-  );
- 
-  if (!("IntersectionObserver" in window)) return;
- 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting || !entry.target.id) return;
- 
-        navLinks.forEach((link) => {
-          const active =
-            link.getAttribute("href") === `#${entry.target.id}`;
- 
-          link.classList.toggle("active", active);
- 
-          if (active) {
-            link.setAttribute("aria-current", "location");
-          } else {
-            link.removeAttribute("aria-current");
-          }
+
+
+  /* ===========================================================================
+     02. APARICIÓN AL HACER SCROLL
+     =========================================================================== */
+  safe('reveal', () => {
+    const items = $$('.reveal');
+
+    if (!hasIO) {
+      items.forEach((el) => el.classList.add('show'));
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add('show');
+          observer.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.15 });
+
+    items.forEach((el) => observer.observe(el));
+  });
+
+  // Las tarjetas de cada grid aparecen una tras otra
+  safe('reveal-stagger', () => {
+    if (!hasIO) return;
+
+    const clearDelay = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          setTimeout(() => (e.target.style.transitionDelay = ''), 1800);
+          clearDelay.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.15 });
+
+    $$('.mvv-grid, .steps-grid, .testi-grid').forEach((grid) => {
+      $$('.reveal', grid).forEach((el, i) => {
+        el.style.transitionDelay = i * 140 + 'ms';
+        clearDelay.observe(el);
+      });
+    });
+  });
+
+
+  /* ===========================================================================
+     03. HERO
+     =========================================================================== */
+  safe('hero', () => {
+    const title = $('.hero h1');
+    const hero = $('.hero');
+    const content = $('.hero-content');
+
+    // 3.1 Letras que suben una por una
+    if (title && !reduceMotion) {
+      const text = title.textContent;
+      title.setAttribute('aria-label', text.trim());
+      title.textContent = '';
+      Array.from(text).forEach((ch, i) => {
+        const s = document.createElement('span');
+        s.textContent = ch;
+        s.style.setProperty('--i', i);
+        s.setAttribute('aria-hidden', 'true');
+        title.appendChild(s);
+      });
+    }
+
+    // 3.2 El contenido se mueve ligeramente con el mouse
+    if (hero && content && canHover && !reduceMotion) {
+      hero.addEventListener('mousemove', (e) => {
+        const x = e.clientX / window.innerWidth - 0.5;
+        const y = e.clientY / window.innerHeight - 0.5;
+        content.style.translate = x * -34 + 'px ' + y * -22 + 'px';
+      });
+      hero.addEventListener('mouseleave', () => (content.style.translate = ''));
+    }
+  });
+
+
+  /* ===========================================================================
+     04. DECORACIONES DE "RAISED WITH LOVE"
+     =========================================================================== */
+  safe('raised', () => {
+    const section = $('.raised');
+    if (!section) return;
+
+    if (!hasIO) { section.classList.add('in'); return; }
+
+    new IntersectionObserver((entries, obs) => {
+      if (entries[0].isIntersecting) {
+        section.classList.add('in');
+        obs.disconnect();
+      }
+    }, { threshold: 0.15 }).observe(section);
+  });
+
+
+  /* ===========================================================================
+     05. FUNCIONES: ACORDEÓN
+     =========================================================================== */
+  safe('accordion', () => {
+    const acc = $('#accordion');
+    if (!acc) return;
+
+    const items = $$('.panel', acc);
+    if (!items.length) return;
+
+    let hovering = false;
+    let inView = false;
+    let hoverTimer;
+    let current = Math.max(0, items.findIndex((p) => p.classList.contains('active')));
+
+    const setActive = (i) => {
+      current = (i + items.length) % items.length;
+      items.forEach((p, k) => {
+        const on = k === current;
+        p.classList.toggle('active', on);
+        p.setAttribute('aria-expanded', String(on));
+      });
+    };
+
+    /* ---- Movimiento que sigue al cursor --------------------------------------
+       Al pasar el mouse por un panel pasan 4 cosas a la vez, cada una a distinta
+       "profundidad" para que se sienta 3D:
+         1. El panel se inclina hacia el cursor (rx / ry).
+         2. La foto se desplaza al lado contrario (px / py).
+         3. El texto flota en sentido opuesto a la foto (ix / iy).
+         4. Un foco de luz sigue al cursor (mx / my / glow) y la sombra se mueve.
+       Los valores no saltan: se suavizan frame a frame (lerp) y el bucle se
+       detiene solo cuando todo está en reposo.                                   */
+    const fx = canHover && !reduceMotion;
+    const KEYS = ['px', 'py', 'rx', 'ry', 'ix', 'iy', 'sx', 'sy', 'glow'];
+    const UNIT = { px: 'px', py: 'px', rx: 'deg', ry: 'deg', ix: 'px', iy: 'px', sx: 'px', sy: 'px', glow: '' };
+    const zero = () => ({ px: 0, py: 0, rx: 0, ry: 0, ix: 0, iy: 0, sx: 0, sy: 0, glow: 0 });
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+    const motion = items.map(() => ({ cur: zero(), tgt: zero() }));
+    let raf = null;
+
+    const tick = () => {
+      let moving = false;
+      items.forEach((p, i) => {
+        const m = motion[i];
+        KEYS.forEach((k) => {
+          const d = m.tgt[k] - m.cur[k];
+          if (Math.abs(d) > 0.01) { m.cur[k] += d * 0.12; moving = true; }
+          else m.cur[k] = m.tgt[k];
+          p.style.setProperty('--' + k, m.cur[k].toFixed(2) + UNIT[k]);
         });
       });
-    },
-    {
-      rootMargin: "-30% 0px -60% 0px",
-      threshold: 0
-    }
-  );
- 
-  sections.forEach((section) => observer.observe(section));
-}
- 
-/* =====================================================
-   2. MENÚ MÓVIL
-   ===================================================== */
- 
-function initMobileMenu() {
-  const toggle = document.getElementById("menuToggle");
-  const links = document.getElementById("navLinks");
- 
-  if (!toggle || !links) return;
- 
-  toggle.setAttribute("aria-expanded", "false");
- 
-  toggle.addEventListener("click", () => {
-    const opening = toggle.getAttribute("aria-expanded") !== "true";
- 
-    toggle.setAttribute("aria-expanded", String(opening));
-    links.classList.toggle("open", opening);
-    document.querySelector(".nav-wrap")?.classList.toggle(
-      "menu-open",
-      opening
-    );
-  });
- 
-  document.addEventListener("click", (event) => {
-    if (
-      !toggle.contains(event.target) &&
-      !links.contains(event.target)
-    ) {
-      closeMobileMenu();
-    }
-  });
- 
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeMobileMenu();
-  });
-}
- 
-function closeMobileMenu() {
-  const toggle = document.getElementById("menuToggle");
-  const links = document.getElementById("navLinks");
- 
-  toggle?.setAttribute("aria-expanded", "false");
-  links?.classList.remove("open");
-  document.querySelector(".nav-wrap")?.classList.remove("menu-open");
-}
- 
-/* =====================================================
-   3. ACORDEÓN DE FUNCIONES
-   ===================================================== */
- 
-function initFeatureAccordion() {
-  const accordion = document.getElementById("accordion");
- 
-  if (!accordion) return;
- 
-  const panels = Array.from(accordion.querySelectorAll(".panel"));
- 
-  panels.forEach((panel, index) => {
-    panel.setAttribute("tabindex", "0");
-    panel.setAttribute("role", "button");
-    panel.setAttribute("aria-expanded", String(panel.classList.contains("active")));
- 
-    function activatePanel() {
-      panels.forEach((otherPanel) => {
-        const active = otherPanel === panel;
- 
-        otherPanel.classList.toggle("active", active);
-        otherPanel.setAttribute("aria-expanded", String(active));
+      raf = moving ? requestAnimationFrame(tick) : null;
+    };
+    const kick = () => { if (!raf) raf = requestAnimationFrame(tick); };
+
+    items.forEach((p, i) => {
+      p.tabIndex = 0;
+      p.setAttribute('role', 'button');
+
+      // Activar con clic, foco o mouse (con una espera mínima para evitar parpadeos)
+      p.addEventListener('click', () => setActive(i));
+      p.addEventListener('focus', () => setActive(i));
+      p.addEventListener('mouseenter', () => {
+        hovering = true;
+        clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(() => setActive(i), 100);
       });
-    }
- 
-    panel.addEventListener("click", activatePanel);
- 
-    panel.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        activatePanel();
+      p.addEventListener('mouseleave', () => clearTimeout(hoverTimer));
+
+      if (fx) {
+        p.addEventListener('pointermove', (e) => {
+          if (e.pointerType === 'touch') return;
+          const r = p.getBoundingClientRect();
+          const nx = clamp((e.clientX - r.left) / r.width - 0.5, -0.5, 0.5);   // -0.5 … 0.5
+          const ny = clamp((e.clientY - r.top) / r.height - 0.5, -0.5, 0.5);
+          const k = p.classList.contains('active') ? 1 : 0.5;                   // los cerrados se mueven menos
+          const t = motion[i].tgt;
+
+          t.ry = nx * 9 * k;     t.rx = -ny * 7 * k;       // inclinación hacia el cursor
+          t.px = -nx * 40 * k;   t.py = -ny * 40 * k;      // foto al lado contrario
+          t.ix = nx * 18;        t.iy = ny * 12;           // texto flota
+          t.sx = -nx * 30 * k;   t.sy = -ny * 20 * k;      // sombra opuesta
+          t.glow = 1;
+
+          // El foco de luz sigue al cursor sin retraso
+          p.style.setProperty('--mx', e.clientX - r.left + 'px');
+          p.style.setProperty('--my', e.clientY - r.top + 'px');
+          kick();
+        });
+
+        p.addEventListener('pointerleave', () => {
+          Object.assign(motion[i].tgt, zero());   // vuelve suavemente al centro
+          kick();
+        });
       }
- 
-      if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-        event.preventDefault();
-        panels[(index + 1) % panels.length].focus();
-      }
- 
-      if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-        event.preventDefault();
-        panels[(index - 1 + panels.length) % panels.length].focus();
-      }
-    });
-  });
-}
- 
-/* =====================================================
-   4. PET MAP
-   ===================================================== */
- 
-function initPetMap() {
-  const map = document.getElementById("mapFrame");
-  const previous = document.getElementById("mapPrev");
-  const next = document.getElementById("mapNext");
- 
-  if (!map || !previous || !next) return;
- 
-  const locations = [
-    {
-      name: "La Chorrera",
-      url: "https://www.openstreetmap.org/export/embed.html?bbox=-79.92%2C8.85%2C-79.73%2C9.02&layer=mapnik"
-    },
-    {
-      name: "Panama City",
-      url: "https://www.openstreetmap.org/export/embed.html?bbox=-79.58%2C8.92%2C-79.45%2C9.05&layer=mapnik"
-    },
-    {
-      name: "Arraiján",
-      url: "https://www.openstreetmap.org/export/embed.html?bbox=-79.72%2C8.88%2C-79.55%2C9.02&layer=mapnik"
-    }
-  ];
- 
-  let current = 0;
- 
-  function updateMap(index) {
-    current = (index + locations.length) % locations.length;
- 
-    map.src = locations[current].url;
-    map.title = `Pet Map — ${locations[current].name}`;
- 
-    const label = document.getElementById("mapLocation");
- 
-    if (label) label.textContent = locations[current].name;
-  }
- 
-  previous.addEventListener("click", () => updateMap(current - 1));
-  next.addEventListener("click", () => updateMap(current + 1));
-}
- 
-/* =====================================================
-   5. PET MOMENTS — CARRUSEL DE FOTOS
-   ===================================================== */
- 
-function initPetMoments() {
-  const fan = document.getElementById("fan");
-  const previous = document.getElementById("fanPrev");
-  const next = document.getElementById("fanNext");
-  const dotsContainer = document.getElementById("dots");
- 
-  if (!fan) return;
- 
-  const photos = Array.from(fan.querySelectorAll("figure"));
- 
-  if (!photos.length) return;
- 
-  let current = 0;
- 
-  function renderDots() {
-    if (!dotsContainer) return;
- 
-    dotsContainer.replaceChildren();
- 
-    photos.forEach((_, index) => {
-      const dot = document.createElement("button");
- 
-      dot.type = "button";
-      dot.className = "dot";
-      dot.setAttribute("aria-label", `View photo ${index + 1}`);
- 
-      dot.addEventListener("click", () => showPhoto(index));
- 
-      dotsContainer.appendChild(dot);
-    });
-  }
- 
-  function showPhoto(index) {
-    current = (index + photos.length) % photos.length;
- 
-    photos.forEach((photo, i) => {
-      photo.classList.toggle("active", i === current);
-    });
- 
-    if (dotsContainer) {
-      Array.from(dotsContainer.children).forEach((dot, i) => {
-        dot.classList.toggle("active", i === current);
-        dot.setAttribute("aria-pressed", String(i === current));
-      });
-    }
- 
-    // Mantiene el índice disponible para estilos tipo abanico.
-    fan.dataset.activeIndex = String(current);
-  }
- 
-  previous?.addEventListener("click", () => showPhoto(current - 1));
-  next?.addEventListener("click", () => showPhoto(current + 1));
- 
-  renderDots();
-  showPhoto(0);
-}
- 
-/* =====================================================
-   6. CONTADORES
-   ===================================================== */
- 
-function initCounters() {
-  const counters = document.querySelectorAll("[data-count]");
- 
-  if (!counters.length) return;
- 
-  function animateCounter(element) {
-    if (element.dataset.counted === "true") return;
- 
-    element.dataset.counted = "true";
- 
-    const target = Number(element.dataset.count);
- 
-    if (!Number.isFinite(target)) return;
- 
-    const suffix = element.dataset.suffix || "";
-    const duration = 1300;
-    const start = performance.now();
- 
-    function update(now) {
-      const progress = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const value = Math.round(target * eased);
- 
-      element.textContent = value.toLocaleString() + suffix;
- 
-      if (progress < 1) requestAnimationFrame(update);
-    }
- 
-    requestAnimationFrame(update);
-  }
- 
-  if ("IntersectionObserver" in window) {
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
- 
-        animateCounter(entry.target);
-        observer.unobserve(entry.target);
+
+      // Teclado
+      p.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActive(i); }
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setActive(i + 1); items[current].focus(); }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setActive(i - 1); items[current].focus(); }
       });
     });
- 
-    counters.forEach((counter) => observer.observe(counter));
-  } else {
-    counters.forEach(animateCounter);
-  }
-}
- 
-/* =====================================================
-   7. PREGUNTAS FRECUENTES
-   ===================================================== */
- 
-function initFAQs() {
-  const list = document.getElementById("faqList");
- 
-  if (!list) return;
- 
-  const items = Array.from(list.querySelectorAll(".faq-item"));
- 
-  items.forEach((item) => {
-    const question = item.querySelector(".faq-q");
-    const answer = item.querySelector(".faq-a");
- 
-    if (!question || !answer) return;
- 
-    question.setAttribute(
-      "aria-expanded",
-      String(item.classList.contains("open"))
-    );
- 
-    answer.hidden = !item.classList.contains("open");
- 
-    question.addEventListener("click", () => {
-      const opening = !item.classList.contains("open");
- 
-      items.forEach((otherItem) => {
-        const otherQuestion = otherItem.querySelector(".faq-q");
-        const otherAnswer = otherItem.querySelector(".faq-a");
- 
-        otherItem.classList.remove("open");
- 
-        if (otherQuestion) {
-          otherQuestion.setAttribute("aria-expanded", "false");
+
+    acc.addEventListener('mouseleave', () => (hovering = false));
+
+    if (hasIO) {
+      new IntersectionObserver((es) => (inView = es[0].isIntersecting), { threshold: 0.3 }).observe(acc);
+    }
+
+    setActive(current);
+
+    // Si nadie lo toca, sigue avanzando solo (se detiene con el foco del teclado)
+    if (!reduceMotion) {
+      setInterval(() => {
+        const focusInside = acc.contains(document.activeElement);
+        if (!hovering && !focusInside && inView && !document.hidden) setActive(current + 1);
+      }, 4500);
+    }
+  });
+
+
+  /* ===========================================================================
+     06. TARJETAS: BRILLO QUE SIGUE AL MOUSE
+     =========================================================================== */
+  safe('card-glow', () => {
+    $$('.mvv-card, .step').forEach((el) => {
+      el.addEventListener('mousemove', (e) => {
+        const r = el.getBoundingClientRect();
+        el.style.setProperty('--x', e.clientX - r.left + 'px');
+        el.style.setProperty('--y', e.clientY - r.top + 'px');
+      });
+    });
+  });
+
+
+  /* ===========================================================================
+     07. CONTADORES DE ESTADÍSTICAS
+     (el "+" o "%" los pone el CSS con ::after; aquí solo va el número)
+     =========================================================================== */
+  safe('counters', () => {
+    const counters = $$('[data-count]');
+
+    const animateCount = (el) => {
+      const target = Number(el.dataset.count);
+      if (reduceMotion) { el.textContent = target.toLocaleString('en-US'); return; }
+
+      const start = performance.now();
+      const duration = 2000;
+      const tick = (now) => {
+        const p = Math.min((now - start) / duration, 1);
+        el.textContent = Math.floor(p * target).toLocaleString('en-US');
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
+
+    if (!hasIO) { counters.forEach(animateCount); return; }
+
+    const counterObserver = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          animateCount(e.target);
+          counterObserver.unobserve(e.target);
         }
- 
-        if (otherAnswer) otherAnswer.hidden = true;
       });
- 
-      if (opening) {
-        item.classList.add("open");
-        question.setAttribute("aria-expanded", "true");
-        answer.hidden = false;
+    }, { threshold: 0.5 });
+
+    counters.forEach((c) => counterObserver.observe(c));
+  });
+
+
+  /* ===========================================================================
+     08. PET MAP
+     =========================================================================== */
+  safe('pet-map', () => {
+    const frame = $('#mapFrame');
+    const prev = $('#mapPrev');
+    const next = $('#mapNext');
+    if (!frame || !prev || !next) return;
+
+    const base = 'https://www.openstreetmap.org/export/embed.html?layer=mapnik&bbox=';
+    const places = [
+      { name: 'Panama City · Vía España', bbox: '-79.5290%2C8.9880%2C-79.5140%2C9.0000' },
+      { name: 'La Chorrera',              bbox: '-79.7900%2C8.8740%2C-79.7740%2C8.8870' },
+      { name: 'Costa del Este',           bbox: '-79.4720%2C8.9950%2C-79.4560%2C9.0100' }
+    ];
+
+    // Etiqueta visible que dice en qué zona estás
+    const label = document.createElement('div');
+    label.className = 'map-label';
+    label.setAttribute('aria-live', 'polite');
+    label.textContent = places[0].name;
+    frame.parentNode.appendChild(label);
+
+    let m = 0;
+    const goMap = (dir) => {
+      m = (m + dir + places.length) % places.length;
+      frame.src = base + places[m].bbox;
+      frame.title = 'Pet Map – ' + places[m].name;
+      label.textContent = places[m].name;
+    };
+
+    next.addEventListener('click', () => goMap(1));
+    prev.addEventListener('click', () => goMap(-1));
+  });
+
+
+  /* ===========================================================================
+     09. PET MOMENTS: ABANICO
+     =========================================================================== */
+  safe('fan', () => {
+    const fan = $('#fan');
+    const dotsBox = $('#dots');
+    const fanPrev = $('#fanPrev');
+    const fanNext = $('#fanNext');
+    if (!fan || !dotsBox) return;
+
+    const cards = $$('figure', fan);
+    if (!cards.length) return;
+
+    const total = cards.length;
+    const half = Math.floor(total / 2);
+    let active = half;
+    let timer = null;
+    let paused = false;
+    let swiped = false;
+
+    // Puntos (accesibles con teclado)
+    const dots = cards.map((_, i) => {
+      const dot = document.createElement('span');
+      dot.setAttribute('role', 'button');
+      dot.tabIndex = 0;
+      dot.setAttribute('aria-label', 'Show photo ' + (i + 1));
+      dot.addEventListener('click', () => { go(i); resetAuto(); });
+      dot.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(i); resetAuto(); }
+      });
+      dotsBox.appendChild(dot);
+      return dot;
+    });
+
+    function render() {
+      const spacing = window.innerWidth < 900 ? 90 : 165;
+
+      cards.forEach((card, i) => {
+        // Posición circular para que el abanico dé la vuelta
+        let offset = (((i - active) % total) + total) % total;
+        if (offset > half) offset -= total;
+
+        const abs = Math.abs(offset);
+        const x = offset * spacing;
+        const y = abs * abs * 10;
+        const rot = offset * 9;
+        const scale = offset === 0 ? 1.05 : 1 - abs * 0.04;
+
+        // La foto que "da la vuelta" por detrás salta sin cruzar todo el abanico
+        const jump = card._offset !== undefined && Math.abs(offset - card._offset) > half;
+        if (jump) card.style.transition = 'none';
+
+        card.style.transform = 'translate(' + x + 'px, ' + y + 'px) rotate(' + rot + 'deg) scale(' + scale + ')';
+        card.style.zIndex = 10 - abs;
+        card.style.opacity = abs > 3 ? 0 : 1;
+        card._offset = offset;
+
+        if (jump) { void card.offsetWidth; card.style.transition = ''; }
+      });
+
+      dots.forEach((d, i) => {
+        d.classList.toggle('on', i === active);
+        d.setAttribute('aria-current', String(i === active));
+      });
+    }
+
+    function go(i) { active = ((i % total) + total) % total; render(); }
+    const next = () => go(active + 1);
+    const prev = () => go(active - 1);
+
+    // Auto-play: se pausa con el mouse, con el foco y si la pestaña está oculta
+    const startAuto = () => {
+      if (reduceMotion) return;
+      clearInterval(timer);
+      timer = setInterval(() => { if (!paused && !document.hidden) next(); }, 3500);
+    };
+    const resetAuto = () => { clearInterval(timer); startAuto(); };
+
+    if (fanNext) fanNext.addEventListener('click', () => { next(); resetAuto(); });
+    if (fanPrev) fanPrev.addEventListener('click', () => { prev(); resetAuto(); });
+    cards.forEach((c, i) => c.addEventListener('click', () => { if (!swiped) { go(i); resetAuto(); } }));
+
+    fan.addEventListener('mouseenter', () => (paused = true));
+    fan.addEventListener('mouseleave', () => (paused = false));
+    fan.addEventListener('focusin', () => (paused = true));
+    fan.addEventListener('focusout', () => (paused = false));
+
+    // Teclado
+    fan.tabIndex = 0;
+    fan.setAttribute('role', 'group');
+    fan.setAttribute('aria-label', 'Pet photos');
+    fan.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); resetAuto(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); next(); resetAuto(); }
+    });
+
+    // Deslizar con el dedo o arrastrar con el mouse
+    let startX = null;
+    fan.addEventListener('pointerdown', (e) => (startX = e.clientX));
+    window.addEventListener('pointerup', (e) => {
+      if (startX === null) return;
+      const dx = e.clientX - startX;
+      startX = null;
+      if (Math.abs(dx) > 50) {
+        swiped = true;
+        if (dx < 0) next(); else prev();
+        resetAuto();
+        setTimeout(() => { swiped = false; }, 60);
       }
     });
+
+    // Recalcular separación al cambiar el tamaño de la ventana
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(render, 120);
+    });
+
+    render();
+    startAuto();
   });
-}
- 
-/* =====================================================
-   8. FORMULARIO DE CONTACTO
-   ===================================================== */
- 
-function initContactForm() {
-  const form = document.getElementById("contactForm");
-  const messageBox = document.getElementById("formOk");
- 
-  if (!form) return;
- 
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
- 
-    if (!form.reportValidity()) return;
- 
-    const name = document.getElementById("cf-name")?.value.trim();
-    const email = document.getElementById("cf-email")?.value.trim();
-    const message = document.getElementById("cf-message")?.value.trim();
- 
-    if (!name || !email || !message) {
-      displayContactMessage(
-        messageBox,
-        "Please complete all fields.",
-        false
-      );
-      return;
-    }
- 
-    // El formulario solo envía mensajes si se configura un endpoint real.
-    const endpoint = form.dataset.endpoint;
- 
-    if (!endpoint) {
-      displayContactMessage(
-        messageBox,
-        "The contact form is not connected to a message service yet.",
-        false
-      );
-      return;
-    }
- 
-    const submitButton = form.querySelector("[type='submit']");
- 
-    if (submitButton) submitButton.disabled = true;
- 
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, message })
+
+
+  /* ===========================================================================
+     10. FAQ
+     =========================================================================== */
+  safe('faq', () => {
+    const faqItems = $$('.faq-item');
+    if (!faqItems.length) return;
+
+    const setFaq = (item, open) => {
+      const answer = $('.faq-a', item);
+      const btn = $('.faq-q', item);
+      item.classList.toggle('open', open);
+      answer.style.maxHeight = open ? answer.scrollHeight + 'px' : '0px';
+      if (btn) btn.setAttribute('aria-expanded', String(open));
+    };
+
+    faqItems.forEach((item, i) => {
+      const btn = $('.faq-q', item);
+      const answer = $('.faq-a', item);
+      if (!btn || !answer) return;
+
+      answer.id = 'faq-a-' + i;
+      btn.setAttribute('aria-controls', answer.id);
+      const icon = $('span', btn);
+      if (icon) icon.setAttribute('aria-hidden', 'true');
+
+      setFaq(item, item.classList.contains('open'));
+
+      btn.addEventListener('click', () => {
+        const willOpen = !item.classList.contains('open');
+        faqItems.forEach((other) => setFaq(other, false));
+        setFaq(item, willOpen);
       });
- 
-      if (!response.ok) {
-        throw new Error(`Request failed: ${response.status}`);
-      }
- 
-      displayContactMessage(
-        messageBox,
-        "Your message was sent successfully.",
-        true
-      );
- 
+    });
+
+    // Si cambia el ancho, el texto cambia de altura: recalcular la respuesta abierta
+    window.addEventListener('resize', () => {
+      faqItems.forEach((item) => {
+        if (item.classList.contains('open')) {
+          const answer = $('.faq-a', item);
+          answer.style.maxHeight = answer.scrollHeight + 'px';
+        }
+      });
+    });
+  });
+
+
+  /* ===========================================================================
+     11. FORMULARIO DE CONTACTO (solo front-end)
+     =========================================================================== */
+  safe('contact-form', () => {
+    const form = $('#contactForm');
+    const ok = $('#formOk');
+    if (!form || !ok) return;
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      // TODO: aquí conecta tu servicio real (Formspree, EmailJS, tu backend…)
+      ok.classList.add('show');
       form.reset();
-    } catch (error) {
-      console.error("Pet Nova contact form error:", error);
- 
-      displayContactMessage(
-        messageBox,
-        "We couldn't send your message. Please try again later.",
-        false
-      );
-    } finally {
-      if (submitButton) submitButton.disabled = false;
-    }
-  });
-}
- 
-function displayContactMessage(element, text, success) {
-  if (!element) return;
- 
-  element.textContent = text;
-  element.hidden = false;
-  element.setAttribute("role", success ? "status" : "alert");
-  element.classList.toggle("success", success);
-  element.classList.toggle("error", !success);
-}
- 
-/* =====================================================
-   9. ANIMACIONES DE ENTRADA
-   ===================================================== */
- 
-function initRevealAnimations() {
-  const elements = document.querySelectorAll(".reveal");
- 
-  if (!elements.length) return;
- 
-  if (
-    !("IntersectionObserver" in window) ||
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  ) {
-    elements.forEach((element) => {
-      element.classList.add("show", "visible");
+      setTimeout(() => ok.classList.remove('show'), 5000);
     });
- 
-    return;
-  }
- 
-  const observer = new IntersectionObserver(
-    (entries, currentObserver) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
- 
-        entry.target.classList.add("show", "visible");
-        currentObserver.unobserve(entry.target);
+  });
+
+
+  /* ===========================================================================
+     12. SCROLL: PROGRESO, VOLVER ARRIBA, NAVBAR Y PARALLAX
+     =========================================================================== */
+  safe('scroll', () => {
+    // Barra de progreso
+    const progressBar = document.createElement('div');
+    progressBar.className = 'scroll-progress';
+    progressBar.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(progressBar);
+
+    // Botón "volver arriba" (huella)
+    const toTop = document.createElement('button');
+    toTop.type = 'button';
+    toTop.className = 'to-top';
+    toTop.setAttribute('aria-label', 'Back to top');
+    toTop.innerHTML = '<svg viewBox="0 0 100 100" aria-hidden="true"><use href="#paw"/></svg>';
+    toTop.addEventListener('click', () =>
+      window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' }));
+    document.body.appendChild(toTop);
+
+    // Elementos con parallax
+    const parallaxItems = [
+      ['.flower-1', -0.08],
+      ['.flower-2', 0.1],
+      ['.blob-left', 0.12],
+      ['.blob-right', -0.1]
+    ]
+      .map(([sel, speed]) => ({ el: $(sel), speed }))
+      .filter((p) => p.el);
+
+    let lastY = window.scrollY;
+    let ticking = false;
+    let lockHide = false;
+
+    // Al pulsar un enlace del menú, la barra no se oculta mientras se desplaza
+    $$('.nav-links a, .brand').forEach((a) => {
+      a.addEventListener('click', () => {
+        lockHide = true;
+        if (navWrap) navWrap.classList.remove('hide');
+        setTimeout(() => (lockHide = false), 1500);
       });
-    },
-    { threshold: 0.12 }
-  );
- 
-  elements.forEach((element) => observer.observe(element));
-}
- 
-/* =====================================================
-   10. BOTÓN VOLVER ARRIBA
-   ===================================================== */
- 
-function initBackToTop() {
-  const button = document.querySelector(
-    ".to-top, .back-to-top, #backToTop"
-  );
- 
-  if (!button) return;
- 
-  function updateButton() {
-    button.classList.toggle("show", window.scrollY > 450);
-  }
- 
-  window.addEventListener("scroll", updateButton, { passive: true });
- 
-  button.addEventListener("click", () => {
-    window.scrollTo({
-      top: 0,
-      behavior: window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
-      ).matches
-        ? "auto"
-        : "smooth"
     });
-  });
- 
-  updateButton();
-}
- 
-/* =====================================================
-   11. RESPALDO PARA IMÁGENES
-   ===================================================== */
- 
-function initImageFallbacks() {
-  document.querySelectorAll("img[data-fallback]").forEach((image) => {
-    image.addEventListener("error", () => {
-      const fallback = image.dataset.fallback;
- 
-      if (
-        fallback &&
-        image.src !== fallback &&
-        !image.dataset.fallbackUsed
-      ) {
-        image.dataset.fallbackUsed = "true";
-        image.src = fallback;
+
+    const onScroll = () => {
+      const y = window.scrollY;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      progressBar.style.width = (max > 0 ? (y / max) * 100 : 0) + '%';
+      toTop.classList.toggle('show', y > 600);
+
+      // Estas clases se conservan; el CSS las neutraliza porque la barra no es fija
+      if (navWrap) {
+        const menuOpen = navLinks && navLinks.classList.contains('open');
+        navWrap.classList.toggle('scrolled', y > 60);
+        navWrap.classList.toggle('hide', y > lastY && y > 300 && !menuOpen && !lockHide);
       }
+      lastY = y;
+
+      if (!reduceMotion) {
+        parallaxItems.forEach(({ el, speed }) => {
+          const r = el.parentElement.getBoundingClientRect();
+          const offset = (r.top + r.height / 2 - window.innerHeight / 2) * speed;
+          el.style.translate = '0 ' + offset + 'px';
+        });
+      }
+      ticking = false;
+    };
+
+    window.addEventListener('scroll', () => {
+      if (!ticking) { requestAnimationFrame(onScroll); ticking = true; }
+    }, { passive: true });
+    onScroll();
+  });
+
+
+  /* ===========================================================================
+     13. MENÚ: RESALTAR LA SECCIÓN ACTUAL
+     =========================================================================== */
+  safe('menu-spy', () => {
+    if (!hasIO) return;
+    const menuLinks = $$('.nav-links a');
+
+    const spy = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        menuLinks.forEach((a) => {
+          const on = a.getAttribute('href') === '#' + e.target.id;
+          a.classList.toggle('active', on);
+          if (on) a.setAttribute('aria-current', 'true');
+          else a.removeAttribute('aria-current');
+        });
+      });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+
+    ['home', 'about', 'functions', 'contact', 'privacy'].forEach((id) => {
+      const s = document.getElementById(id);
+      if (s) spy.observe(s);
     });
   });
-}
+
+
+  /* ===========================================================================
+     14. BOTONES: EFECTO MAGNÉTICO Y RIPPLE
+     =========================================================================== */
+  safe('buttons', () => {
+    // Magnético
+    if (canHover && !reduceMotion) {
+      $$('.btn-cta, .login, .circle').forEach((el) => {
+        el.addEventListener('mousemove', (e) => {
+          const r = el.getBoundingClientRect();
+          const dx = (e.clientX - r.left - r.width / 2) * 0.25;
+          const dy = (e.clientY - r.top - r.height / 2) * 0.25;
+          el.style.translate = dx + 'px ' + dy + 'px';
+        });
+        el.addEventListener('mouseleave', () => (el.style.translate = ''));
+      });
+    }
+
+    // Ripple al hacer clic
+    $$('.btn-cta, .contact-form button').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const r = btn.getBoundingClientRect();
+        const s = document.createElement('span');
+        s.className = 'ripple';
+        s.style.left = e.clientX - r.left + 'px';
+        s.style.top = e.clientY - r.top + 'px';
+        btn.appendChild(s);
+        setTimeout(() => s.remove(), 700);
+      });
+    });
+  });
+
+
+  /* ===========================================================================
+     15. HUELLAS QUE SIGUEN AL CURSOR
+     =========================================================================== */
+  safe('paw-prints', () => {
+    if (!canHover || reduceMotion) return;
+
+    let lastX = 0;
+    let lastPawY = 0;
+    let left = false;
+
+    document.addEventListener('mousemove', (e) => {
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastPawY;
+      if (Math.hypot(dx, dy) < 80) return;
+
+      const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+      lastX = e.clientX;
+      lastPawY = e.clientY;
+      left = !left;
+
+      const print = document.createElement('div');
+      print.className = 'paw-print';
+      print.setAttribute('aria-hidden', 'true');
+      print.style.left = e.clientX + (left ? -10 : 10) + 'px';
+      print.style.top = e.clientY + 'px';
+      print.style.setProperty('--rot', angle + 'deg');
+      print.innerHTML = '<svg viewBox="0 0 100 100"><use href="#paw"/></svg>';
+      document.body.appendChild(print);
+      setTimeout(() => print.remove(), 1400);
+    });
+  });
+
+
+  /* ===========================================================================
+     16. IMÁGENES Y LOGOS CON RESPALDO
+     =========================================================================== */
+  safe('fallbacks', () => {
+    // Fotos del abanico: si img/petN.jpg no existe, usa la foto de respaldo
+    $$('img[data-fallback]').forEach((img) => {
+      const useBackup = () => {
+        const fb = img.dataset.fallback;
+        if (!fb) return;
+        delete img.dataset.fallback;
+        img.src = fb;
+      };
+      img.addEventListener('error', useBackup, { once: true });
+      if (img.complete && img.naturalWidth === 0) useBackup();
+    });
+
+    // Logos: si img/logo.png no existe, se muestra el logo de texto
+    $$('.brand-logo, .footer-logo-img').forEach((img) => {
+      const holder = img.closest('.brand, .footer-logo');
+      const showText = () => holder && holder.classList.add('no-logo');
+      img.addEventListener('error', showText, { once: true });
+      if (img.complete && img.naturalWidth === 0) showText();
+    });
+  });
+
+
+  /* ===========================================================================
+     17. BANDA DE OLAS CON ARTE REAL (solo si la imagen carga)
+     =========================================================================== */
+  safe('waves', () => {
+    const url = 'https://static.wixstatic.com/media/11062b_010acd29e7244c6cb351a4b9b8fdf2f5~mv2.png';
+    const bands = $$('.waves');
+    if (!bands.length) return;
+
+    const art = new Image();
+    art.onload = () => {
+      bands.forEach((band) => {
+        band.style.setProperty('--wave-img', "url('" + url + "')");
+        band.classList.add('img-ok');
+      });
+    };
+    art.src = url;
+  });
+
+
+  // Avisa al respaldo del HTML de que este archivo cargó bien
+  window.__petnovaOK = true;
+})();
